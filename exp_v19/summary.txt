@@ -1,0 +1,34 @@
+EXPERIMENTO v19 — LGBM SIN stacking OLS (maximizar diversidad del ensamble)
+Fecha: 2026-08-02
+
+HIPÓTESIS (observación del usuario + lección de v18)
+La OLS entra 2 veces en el ganador: como feature del LGBM (stacking
+pred_ols_yoy/rec, ~0.6% gain) y como pata del ensamble (70%). El stacking
+acercaría el LGBM a la OLS y reduciría la diversidad. Quitándolo, el LGBM
+sería más ortogonal -> el ensamble bajaría del 0.227.
+
+QUÉ SE HIZO
+- p01_sin_stacking.py: pipeline ganador v16 (v11+cat3+ocurrencia) SIN
+  pred_ols_*. Params fijos. LGBM solo + ensamble 70/30 y 65/35.
+
+RESULTADOS
+  backtest sin stacking: 0.2322 (v16 con stacking 0.2363)
+  corr(LGBM sin stacking, OLS): 0.9931   <<< CLAVE
+  Kaggle LGBM solo:  0.241  (v16 con stacking 0.235: EMPEORÓ standalone)
+  Kaggle ensamble w70/w65: 0.228  (ganador con stacking: 0.227)
+
+CONCLUSIONES
+1. HIPÓTESIS RECHAZADA. Quitar el stacking NO mejoró el ensamble (0.228
+   vs 0.227). La premisa era falsa: el stacking NO era la causa de la
+   baja diversidad.
+2. corr(LGBM,OLS)=0.9931 SIN stacking: las patas siguen casi idénticas en
+   nivel. Su similitud es ESTRUCTURAL (ambas predicen cerca del nivel
+   histórico / s2), no efecto del stacking. Quitarlo solo le restó al LGBM
+   0.6% de señal útil sin ganar diversidad.
+3. MATIZ VALIOSO: dos modelos correlacionados 0.993 igual dan un ensamble
+   mejor que cada uno (0.227 < 0.231 OLS, 0.235 LGBM). La diversidad que
+   paga no es la correlación global de niveles, sino que en los productos
+   GRANDES puntuales (los que mueven el WAPE) OLS y LGBM erran distinto y
+   el promedio recorta ahí. Diversidad local, no global.
+4. El stacking se queda (es levemente útil o neutral). GANADOR NO cambia:
+   ensamble OLS70/LGBM-v16-30 = 0.227 (puesto 3).

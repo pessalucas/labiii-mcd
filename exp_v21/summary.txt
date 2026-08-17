@@ -1,0 +1,44 @@
+EXPERIMENTO v21 — STOCK + QTY/MIX (regresor) + REQUEST por par (clasificador)
+Fecha: 2026-08-02
+
+SPEC (ESPECIFICACION_variables.md): sumar señales que la OLS no tiene
+(stock, qty pedida, mix tn/qty) para subir la DECORRELACIÓN de la pata
+LGBM y que el ensamble gane. Optunas completos. Submits sin/con calib 1.03.
+
+QUÉ SE HIZO
+- p01: features_extra_regresor.parquet (20: 7 stk_, 9 q_, 4 mix_/qtn),
+  scale-free, auditadas.
+- p02: clasificador + pair_req_* (intención de compra por par), Optuna n=40.
+- p03: regresor v16 + stock/qty/mix (159 feats), Optuna n=50. Ensamble
+  70/30 sin y con calib. Medida de decorrelación pata vs OLS.
+
+RESULTADOS
+  clasificador: AUC 0.7931 (v16 era 0.793) — pair_req_* NO aporta (0-0.2%).
+  regresor gain: QTY 3.8%, MIX 3.8%, STOCK 1.6%, OCC 0.8% (usadas in-sample)
+  backtest fijo: 0.2393 (PEOR que v16 0.2363: bloat)
+  optuna n=50 backtest: 0.2283 (no submiteado)
+  corr(LGBM v21, OLS): 0.9925 (v16: 0.9931) — casi NO bajó
+  Kaggle: ens sin calib 0.231 | ens con calib 0.230 (ganador era 0.226)
+
+CONCLUSIONES
+1. Las señales nuevas EMPEORAN el ensamble (0.226 -> 0.230). Fallo doble:
+   bloat en el regresor (backtest fijo peor) + no aportan al clasificador.
+2. HIPÓTESIS CENTRAL DEL SPEC RECHAZADA: stock/qty/mix NO subieron la
+   decorrelación (0.9931 -> 0.9925, casi nada). Aunque el origen del dato
+   sea distinto, todas las señales terminan correlacionadas con el nivel
+   de ventas del producto — que es lo que la OLS ya predice. No hay
+   diversidad nueva por cambiar de fuente de dato.
+3. pair_req_* redundante con recencia/frecuencia (quien compra regular,
+   pide regular; gap pedido-entregado global solo 2.1%).
+4. qty/mix capturan gain in-sample (3.8%) pero no transfieren: patrón de
+   bloat ya visto en v9/v13.
+
+GANADOR NO CAMBIA: ensamble v16 x 1.03 = 0.226 (puesto 3).
+LECCIÓN: la diversidad para el ensamble no se logra con nuevas FUENTES de
+dato si todas proyectan sobre el mismo nivel de ventas. Haría falta una
+señal que prediga la DESVIACIÓN del nivel, no el nivel.
+
+---
+ADENDA: variante Optuna n=50 submiteada (con calib 1.03) -> Kaggle 0.230.
+El backtest del optuna (0.2283) NO transfirió al LB (dio 0.230, igual que
+el fijo). Confirma: v21 no mejora en ninguna config. Ganador sigue 0.226.

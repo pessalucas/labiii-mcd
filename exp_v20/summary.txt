@@ -1,0 +1,45 @@
+EXPERIMENTO v20 — Blend estacional suave (naive feb-pasado ∝ amplitud cat3)
+Fecha: 2026-08-02
+
+PREGUNTA
+En vez de meter la señal estacional como feature del LGBM (exp_v18, que no
+mejoró el ensamble), ¿promediar la SALIDA del ensamble con el naive estacional,
+con una dosis proporcional a cuán estacional es la categoría del producto,
+mejora el score?
+
+ORIGEN
+- exp_v17: el naive estacional (ventas del mismo mes año pasado) le gana al
+  ensamble en 284 productos = 34% del tonelaje (backtest feb-2019). PERO solo
+  como oráculo: aplicado a todos da 0.405 (desastre). El valor está en dosificar.
+- exp_v18: se_* como feature del LGBM no movió el ensamble (redundante con OLS).
+
+QUÉ SE HIZO (p01_blend_estacional.py)
+  pred = (1 - w)·ensamble + w·naive_estacional
+  w = min(0.6, k·amplitud_estacional_cat3),  k=1
+  - naive = ventas del mismo mes año pasado (feb-2019 para feb-2020 = wide[201902]).
+  - amplitud = |factor_cat3 - global|, factor = mediana de tn(feb)/prom_12m,
+    estimado EX-ANTE con febreros previos (feb-2018 + feb-2019). Sin fuga.
+  - El peso se desvanece solo en categorías planas (Mayonesa ~0) y sube en las
+    muy estacionales (Sopas/Caldo/Opaco/PISOS). No hay umbral binario.
+  - Base = ensamble campeón OLS80/LGBMv11-20 (exp_v11/exp_v11_ens_w80.csv, 0.228).
+
+RESULTADOS
+  backtest feb-2019 (variante elegida en exp_v17): 0.1981 -> 0.1903 (-4%).
+    (probadas: global 10% naive 0.1927; segmento 0.1923; soft∝ampl 0.1903 <- mejor)
+  peso naive medio 0.106, toca 657 prods (dosis suave), delta total +0.3% (+83 tn).
+  >>> KAGGLE PÚBLICO: 0.228  (= base ensamble; NO mejoró)
+
+CONCLUSIONES
+1. Neutral en el LB. Ni el blend más suave, ex-ante y mejor motivado
+   (estacionalidad CLIMÁTICA, no de régimen) transfiere. No empeoró tampoco.
+2. Coherente con la evidencia: la estacionalidad de categoría se repite solo
+   corr 0.45 entre feb-2018 y feb-2019 (y 0.17 a nivel producto). El backtest
+   feb-2019 premia una señal que feb-2020 no confirma. 9na+ divergencia local/LB.
+3. Cierra la línea estacional (exp_v17 diagnóstico -> v18 feature -> v20 blend):
+   el naive gana en 34% del tonelaje pero NO hay forma ex-ante de capturarlo que
+   sobreviva al LB. El campeón (ensamble ~0.227-0.228) no se movió.
+
+PENDIENTE (mayor palanca real): 3ra familia de modelos ORTOGONAL al par
+OLS+LGBM (AutoGluon alineado dic->feb), no más ajustes de las 2 patas actuales.
+
+ARTEFACTOS: p01_blend_estacional.py, candidato_blend_estacional.csv.

@@ -1,0 +1,164 @@
+"""exp_v21: integración = pipeline v11 + features de OCURRENCIA (hurdle).
+
+Toma el mejor pipeline (v11: 76 limpias + stacking OLS + categóricas +
+categoría/penetración) y le suma las 3 features de ocurrencia agregadas
+(occ_n_esperados, occ_demanda_esp, occ_demanda_norm) del parquet de
+exp_v21/p01. Optuna 30 + fijo. 2 submits. Reporta gain de occ_*.
+"""
+
+import json
+import re
+import subprocess
+import sys
+import warnings
+from pathlib import Path
+
+import lightgbm as lgb
+import numpy as np
+import optuna
+import pandas as pd
+import polars as pl
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from datos import RUTA_PROYECTO, cargar_apredecir, cargar_productos
+from features_lgbm import FeatureBuilder
+
+warnings.filterwarnings("ignore")
+optuna.logging.set_verbosity(optuna.logging.WARNING)
+RUTA_EXP = Path(__file__).resolve().parent
+RUTA_V11 = RUTA_EXP.parent / "exp_v11"
+COMPETENCIA = "labo-iii-2026-ba"
+SEMILLA = 102191
+EPS = 1e-6
+N_TRIALS = 30
+PARAMS_FIJOS = dict(n_estimators=400, learning_rate=0.03, num_leaves=31,
+                    min_child_samples=30, colsample_bytree=0.8, subsample=0.8)
+
+fb = FeatureBuilder()
+wide = fb.wide
+mes_menos = fb.mes_menos
+
+# features de categoría (v11) + ocurrencia (v12), indexadas por corte
+fcat = pd.read_parquet(RUTA_V11 / "features_categoria.parquet")
+fcat_c = {c: g.set_index("product_id").drop(columns="corte") for c, g in fcat.groupby("corte")}
+focc = pd.read_parquet(RUTA_EXP / "features_ocurrencia_v21.parquet")
+focc_c = {c: g.set_index("product_id").drop(columns="corte") for c, g in focc.groupby("corte")}
+fext = pd.read_parquet(RUTA_EXP / "features_extra_regresor.parquet")
+fext_c = {c: g.set_index("product_id").drop(columns="corte") for c, g in fext.groupby("corte")}
+print(f"categoría: {next(iter(fcat_c.values())).shape[1]} feats | "
+      f"ocurrencia: {next(iter(focc_c.values())).shape[1]} feats")
+
+
+def cargar_magicos() -> set[int]:
+    nb = json.loads((RUTA_PROYECTO / "src/Estadistica/z403_RegresionLineal_local.ipynb").read_text())
+    celda = next("".join(c["source"]) for c in nb["cells"]
+                 if c["cell_type"] == "code" and "productos_magicos" in "".join(c["source"]))
+    return set(int(x) for x in re.findall(r"productos_magicos = \[(.*?)\]",
+               celda, flags=re.S)[-1].replace("\n", " ").split(","))
+
+
+magicos = cargar_magicos()
+prod = cargar_productos().unique("product_id").to_pandas().set_index("product_id")
+train_prods = wide.index[wide.notna().sum(axis=1) >= 12]
+conteo_c3 = prod.loc[prod.index.isin(train_prods), "cat3"].value_counts()
+c3_validas = set(conteo_c3[conteo_c3 > 10].index)
+CATS1 = sorted(set(prod["cat1"].dropna().unique()) | {"OTROS"})
+CATS2 = sorted(set(prod["cat2"].dropna().unique()) | {"OTROS"})
+CATS3 = sorted(c3_validas | {"OTROS"})
+
+
+def ols_coef(cut_train: int):
+    cols = [mes_menos(cut_train, k) for k in range(12)]
+    obj = mes_menos(cut_train, -2)
+    if cols[-1] not in wide.columns or obj not in wide.columns:
+        return None
+    d = wide.loc[wide.index.isin(magicos), cols + [obj]].dropna()
+    if len(d) < 30:
+        return None
+    X = np.column_stack([np.ones(len(d)), d[cols].values])
+    return np.linalg.lstsq(X, d[obj].values, rcond=None)[0]
+
+
+def armar(cut: int, con_clase: bool) -> pd.DataFrame:
+    d = fb.armar_corte(cut, con_clase)
+    for nombre, lag in [("pred_ols_yoy", 12), ("pred_ols_rec", 2)]:
+        coef = ols_coef(mes_menos(cut, lag))
+        if coef is not None:
+            cols = [mes_menos(cut, k) for k in range(12)]
+            da = wide[cols].dropna()
+            p = pd.Series(np.column_stack([np.ones(len(da)), da.values]) @ coef,
+                          index=da.index).clip(lower=0)
+            d[nombre] = (p.reindex(d.index) / d["_prom"]).values
+        else:
+            d[nombre] = np.nan
+    p = prod.reindex(d.index)
+    d["cat1"] = pd.Categorical(p["cat1"].fillna("OTROS"), categories=CATS1)
+    d["cat2"] = pd.Categorical(p["cat2"].fillna("OTROS"), categories=CATS2)
+    c3 = p["cat3"].where(p["cat3"].isin(c3_validas), "OTROS").fillna("OTROS")
+    d["cat3"] = pd.Categorical(c3, categories=CATS3)
+    d = d.join(fcat_c[cut], how="left")          # categoría/penetración (v11)
+    d = d.join(focc_c[cut], how="left")          # ocurrencia v21 (con pair_req_*)
+    d = d.join(fext_c[cut], how="left")          # stock + qty + mix (v21)
+    return d
+
+
+def fit(dtr: pd.DataFrame, params: dict) -> lgb.LGBMRegressor:
+    m = lgb.LGBMRegressor(objective="l1", random_state=SEMILLA, verbosity=-1,
+                          subsample_freq=1, **params)
+    m.fit(dtr.drop(columns=["clase_ratio", "_prom"]), dtr["clase_ratio"])
+    return m
+
+
+def wape_pred(m, dev, real) -> float:
+    ratio = pd.Series(m.predict(dev.drop(columns="_prom")), index=dev.index).clip(lower=0)
+    pred = ratio * dev["_prom"]
+    comun = pred.index.intersection(real.index)
+    return float(np.abs(real[comun] - pred[comun]).sum() / real[comun].sum())
+
+
+FOLDS = [(201808, 1.0), (201810, 1.0), (201812, 2.0)]
+folds = []
+for cut_eval, peso in FOLDS:
+    n_train = (pd.Period(str(cut_eval), freq="M") - pd.Period("201801", freq="M")).n - 1
+    cortes = [mes_menos(cut_eval, k) for k in range(2, 2 + n_train)]
+    dtr = pd.concat([armar(c, True) for c in cortes])
+    dev = armar(cut_eval, False)
+    real = wide[mes_menos(cut_eval, -2)].dropna()
+    folds.append((dtr, dev, real, peso))
+
+d_final = pd.concat([armar(mes_menos(201910, k), True) for k in range(22)])
+d_fut = armar(201912, False)
+print(f"train final: {len(d_final)} filas, {d_final.shape[1]-2} features")
+
+
+def evaluar(params: dict) -> float:
+    t, w = 0.0, 0.0
+    for dtr, dev, real, peso in folds:
+        t += peso * wape_pred(fit(dtr, params), dev, real); w += peso
+    return t / w
+
+
+PARAMS_OPTUNA = dict(n_estimators=900, learning_rate=0.029707640060246968,
+                     num_leaves=37, min_child_samples=104,
+                     lambda_l1=2.137202823323289e-06, lambda_l2=2.0989392031327602e-05,
+                     colsample_bytree=0.959006372496376, subsample=0.6090022190079323)
+tb_prom = (fb.ventas.filter(pl.col("periodo").is_between(201901, 201912))
+           .group_by("product_id").agg(pl.col("tn").mean()))
+apredecir = cargar_apredecir()
+m = fit(d_final, PARAMS_OPTUNA)
+ratio = pd.Series(m.predict(d_fut.drop(columns="_prom")), index=d_fut.index).clip(lower=0)
+pred_lgbm = ratio * d_fut["_prom"]
+ols = pl.read_csv(RUTA_PROYECTO / "exp/LR01/linreg.csv").to_pandas().set_index("product_id")["tn"]
+tb_ols = pl.DataFrame({"product_id": ols.index.to_list(), "ols": ols.to_list()})
+tb_lgb = pl.DataFrame({"product_id": pred_lgbm.index.to_list(), "lgbm": pred_lgbm.to_list()})
+base = (apredecir.join(tb_prom, on="product_id", how="left")
+        .join(tb_ols, on="product_id", how="left").join(tb_lgb, on="product_id", how="left")
+        .with_columns(pl.coalesce([pl.col("ols"), pl.col("tn")]).alias("ols"),
+                      pl.coalesce([pl.col("lgbm"), pl.col("tn")]).alias("lgbm")))
+out = (base.with_columns((1.03*(0.70*pl.col("ols")+0.30*pl.col("lgbm"))).clip(lower_bound=0).alias("tn"))
+       .select("product_id","tn").sort("product_id"))
+assert out.height==780 and out["tn"].null_count()==0
+f = RUTA_EXP / "exp_v21_optuna50_con_calib.csv"; out.write_csv(f)
+subprocess.run([str(RUTA_PROYECTO/".venv/bin/kaggle"),"competitions","submit","-c",COMPETENCIA,
+                "-f",str(f),"-m","exp_v21 optuna50 ens con calib 1.03"],check=True)
+print("submit OK -> exp_v21_optuna50_con_calib.csv")

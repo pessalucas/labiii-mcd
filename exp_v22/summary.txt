@@ -1,0 +1,20 @@
+EXPERIMENTO v22 — Sub-modelo de ocurrencia: REGRESOR en vez de CLASIFICADOR
+Fecha: 2026-08-02
+
+PREGUNTA (usuario): cambiar el clasificador de ocurrencia (P(compra)) por
+un regresor (predice tn del par en t+2 directo), mismos optunas, evaluar 1.03.
+
+QUÉ SE HIZO
+- p01: regresor de ocurrencia (target=tn del par, objective l1, Optuna n=30
+  por WAPE del par). occ_demanda_esp = suma directa de tn predicha por par.
+- p02: ganador v16 con ocurrencia_v22, params fijos, ensamble 70/30, sin/con 1.03.
+
+RESULTADOS
+  backtest fijo: 0.2410 (v16 clasificador 0.2363: PEOR)
+  gain occ_*: 0.8% | corr con OLS 0.9935 (igual)
+  Kaggle: ens sin calib 0.229 | con calib 0.228 (ganador clasificador 0.226/0.225)
+
+CONCLUSIÓN
+El REGRESOR de ocurrencia es PEOR que el clasificador (hurdle). Consistente
+con el piloto v11: la regresión directa del par estima peor la magnitud de
+los intermitentes que P(compra)*monto. El clasificador se queda.

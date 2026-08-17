@@ -1,0 +1,29 @@
+EXPERIMENTO v23 — Calibración del factor por TENDENCIA del producto
+Fecha: 2026-08-02
+
+IDEA (usuario): reemplazar el factor global 1.03 por uno que dependa de la
+tendencia lineal de cada producto. Base: v17 mostró que el LGBM comprime
+distinto según el movimiento del producto.
+
+QUÉ SE HIZO
+- tendencia(p) = pendiente OLS de tn normalizado (12m).
+- factor(p) = clip(a + b*tendencia_std, 0.90, 1.20). a,b calibrados en el
+  backtest dic18->feb19 (ensamble 70/30) minimizando WAPE.
+- Aplicado a la submission ganadora; comparado vs 1.03 global.
+
+RESULTADOS
+  backtest: sin calib 0.1938 | global 1.03 0.1926 | por tendencia 0.1871
+  mejor: a=1.06, b=-0.06 (b<0: MÁS factor a los que caen, MENOS a los que suben)
+  factor por producto: rango 0.957-1.116, mediana 1.03
+  Kaggle: 0.225  <<< NUEVO RÉCORD (global 1.03 era 0.226)
+
+CONCLUSIONES
+1. La calibración por tendencia MEJORA: 0.226 -> 0.225. Puesto 3, a 1
+   milésima del 2do (0.224).
+2. b<0 = corrección por REVERSIÓN A LA MEDIA: los productos que venían
+   cayendo rebotan (factor ~1.11), los que subían se desaceleran (~0.96).
+   El 1.03 global promediaba ambos; separarlos captura mejor.
+3. Raro pero consistente: el backtest lo predijo (0.1871 << 0.1926). El
+   sesgo por tendencia es estructural, transfiere mejor que el tuning fino.
+
+GANADOR ACTUALIZADO: ensamble 70/30 x factor(tendencia) = 0.225.
