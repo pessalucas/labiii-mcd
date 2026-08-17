@@ -1,0 +1,30 @@
+EXPERIMENTO v14 — cat4 EN LUGAR de cat3 (no además)
+Fecha: 2026-08-02
+
+PREGUNTA
+v13 sumó cat4 encima de cat3 y empeoró por bloat/solapamiento. ¿cat4
+SOLA (reemplazando a cat3) le gana a cat3 sola (v11, 0.240)?
+
+QUÉ SE HIZO
+- p01_cat4_reemplaza_cat3.py: pipeline v11 pero con features c4_*/sh4_*
+  y categórica cat4 EN LUGAR de las de cat3. 135 features (como v11).
+  Reusó hiperparametría v11. 2 submits.
+
+RESULTADOS
+  backtest: fijo 0.2402 | v11opt 0.2363  (v11/cat3: 0.2395/0.2321)
+  Kaggle:   fijo 0.271 | v11opt 0.269    (v11/cat3: 0.240)
+  gain cat4: 11.4-15.6% (alto, pero peor score)
+
+CONCLUSIONES
+1. cat4 sola PIERDE contra cat3 sola: 0.269 vs 0.240. La línea cat4
+   queda cerrada: no mejora ni sumada (v13: 0.248) ni reemplazando
+   (v14: 0.269).
+2. cat3 (99 niveles, sabor/tipo específico) es mejor contexto de familia
+   que cat4 (58 grupos, cat2+brand más amplia). La granularidad de cat3
+   captura mejor la dinámica relevante; cat4 mezcla sub-familias.
+3. El gain alto de cat4 (15.6%) vuelve a confirmar: gain alto != mejor
+   score. cat4 es informativa en train pero generaliza peor.
+
+ESTADO FINAL DE LA LÍNEA CATEGORÍA:
+  cat3 (v11) 0.240 > cat3+cat4 (v13) 0.248 > cat4 (v14) 0.269
+  Mejor overall del proyecto: ENSAMBLE OLS80/LGBMv11-20 = 0.228.

@@ -1,0 +1,53 @@
+EXPERIMENTO v7 — LGBM con todos los productos, features de pico,
+request y optimización Optuna
+Fecha: 2026-08-01/02
+
+PREGUNTA
+¿El LGBM de ratios mejora si (a) come TODOS los productos (amplitud del
+régimen reciente, ~18k filas), (b) recibe features específicas del
+rebote dic->feb que subestimaba, (c) usa la demanda insatisfecha
+(cust_request_tn) y (d) se optimiza con Optuna (30 trials)?
+
+QUÉ SE HIZO
+- p01_lgbm_full.py: tres dosis con ablación (D1 amplitud / D2 +pico /
+  D3 +request), cortes 201801..201910, 13 lags calendario normalizados.
+- p02_lgbm_optuna.py: Optuna 30 trials, objetivo WAPE multi-corte
+  (3 folds sin fuga, dic pesa doble), espacio = regularización + nivel
+  de features. Feature importance guardado en feature_importance.txt.
+- test_zeros.csv: submission de todos ceros -> score 1.000 exacto,
+  verificación empírica de que la métrica es WAPE.
+
+RESULTADOS (Kaggle público)
+  D1 todos los productos     0.268   (C2-mágicos era 0.285: amplitud +)
+  D2 + features de pico      0.267   (features: nada)
+  D3 + request               0.268   (request: nada)
+  optuna30 (nivel 3)         0.274   (tuning local 0.250 vs 0.254, pero
+                                      PEOR en LB: 4ta inversión local/LB)
+  OLS mágica                 0.231   (sigue invicta)
+
+CONCLUSIONES
+1. La amplitud (más productos) ayudó: 0.285 -> 0.268. Cierra ~1/3 de la
+   brecha. El hambre de datos existía pero no era el cuello principal.
+2. Features anti-defecto y request: ignoradas por el modelo (ver
+   feature_importance.txt: rebote_hist 1.0%, idx_objetivo 0.4%,
+   req_gap 0.9% combinado). Primer test de "información nueva"
+   (demanda insatisfecha): negativo tal como fue construida.
+3. El LGBM es un "momentum inteligente": 60% del gain en tn_0+idx_actual
+   (el nivel actual del producto) + mes_corte como corrector. Pondera
+   exactamente lo opuesto que la OLS mágica (donde diciembre no
+   significa nada y mandan nov/feb-previo/mar/jun). Entrenado en saltos
+   genéricos t->t+2, aprende lo útil para el salto promedio — que es lo
+   menos útil para el salto dic->feb.
+4. Optuna sobre brújula local torcida = sobreajuste al año viejo. El
+   techo del LGBM en este problema es ~0.267 y no se mueve con datos,
+   features ni tuning.
+5. Métrica verificada empíricamente: WAPE (ceros -> 1.000).
+
+IMPLICACIÓN PARA EXP_V8
+OLS (especialista dic->feb, 0.231) y LGBM (generalista momentum, 0.267)
+ponderan meses opuestos -> errores estructuralmente decorrelacionados ->
+ensamble como candidato natural.
+
+SCORES ACUMULADOS
+0.231 OLS mágica | 0.238-0.258 v5 | 0.249 AG-RMSE | 0.260 v2 | 0.261+ v3
+| 0.267-0.274 v7 | 0.272-0.760 v6 | 0.278-0.297 v4

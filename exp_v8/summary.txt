@@ -1,0 +1,88 @@
+EXPERIMENTO v8 — LGBM: ventana 24m + ratios recientes + clientela +
+tendencias + stacking OLS (spec del usuario) + Optuna L1 vs RMSE
+Fecha: 2026-08-02
+
+PREGUNTA
+¿El LGBM mejora con el feature set completo especificado: 24 lags,
+ratios enfocados en tn_0..tn_5, sumas hasta 12, métricas de clientes
+(pista de z601), tendencias lineales 12/6/3 condicionales, edad de la
+serie, y la OLS mágica como input (stacking)? ¿Y cómo compara entrenar
+con L1 (alineado a WAPE) vs RMSE?
+
+QUÉ SE HIZO
+- p01_lgbm_stack.py: params fijos, objetivo L1. Kaggle 0.250.
+- p02_lgbm_optuna_l1_vs_rmse.py: + feature edad_serie, dos estudios
+  Optuna (30 trials c/u, vara multi-corte 3 folds sin fuga, dic x2):
+  objetivo L1 y objetivo L2/RMSE. FI de ambos en
+  feature_importance_optuna.txt. Ambos submiteados.
+
+=========================================================================
+FEATURES USADAS (50 en total; todas por producto en el corte C, escaladas
+por prom = promedio de tn de los últimos 12 meses, salvo flags y conteos)
+=========================================================================
+LAGS (24)
+  tn_0..tn_23     ventas mensuales hacia atrás desde el corte, /prom.
+                  tn_0=mes del corte. tn_12..tn_23 = NaN si el producto
+                  no existía (LGBM maneja NaN nativo).
+RATIOS RECIENTES (6), clip [0,10]
+  r_0_1           tn_0/tn_1 (momentum mensual)
+  r_1_2           tn_1/tn_2
+  r_02_34         (tn_0+tn_2)/(tn_3+tn_4)  [spec usuario]
+  r_tri           (tn_0+tn_1+tn_2)/(tn_3+tn_4+tn_5)
+  r_sem           suma(tn_0..tn_5)/suma(tn_6..tn_11)
+  r_yoy_tri       (tn_0+tn_1+tn_2)/(tn_12+tn_13+tn_14) año contra año
+SUMAS (4)
+  s2,s3,s6,s12    suma de los últimos k meses / (k*prom) = promedio
+                  móvil normalizado de k meses
+TENDENCIAS (3)
+  pend_3/6/12     pendiente lineal de los últimos k lags normalizados
+                  (tiempo ascendente; NaN si la ventana no existe)
+CLIENTELA (7) — de z601: composición de la venta
+  ncli_0          nº de clientes distintos que compraron en el mes del corte
+  ncli_prom       promedio de clientes de los últimos 12 meses
+  ncli_idx        ncli_0/ncli_prom (¿está ganando o perdiendo bocas?)
+  basket_idx      compra promedio por cliente del mes vs la histórica
+  ncli_pend_3/6/12 pendiente del nº de clientes normalizado
+EDAD (1)
+  edad_serie      meses con datos de la serie al corte [p02]
+STACKING OLS (2), sin fuga
+  pred_ols_yoy    predicción/prom de la OLS mágica entrenada en C-12
+                  (para el corte final 201912 = el modelo 0.231 real)
+  pred_ols_rec    ídem entrenada en C-2 (último examen cerrado)
+FORMA Y FLAGS (3)
+  cv              desvío de los 12 lags normalizados (volatilidad)
+  anio_corte      año del corte (flag de régimen macro)
+  mes_corte       mes del corte (1-12, corrector estacional)
+
+TARGET: tn(C+2)/prom (ratio). Predicción final = ratio_pred * prom.
+Train: TODOS los productos x cortes 201801..201910 = 18.706 filas.
+
+=========================================================================
+RESULTADOS (Kaggle público)
+=========================================================================
+  p01 params fijos, L1          0.250  <- MEJOR MODELO NO-OLS DEL PROYECTO
+  p02 Optuna L1 (+edad_serie)   0.261
+  p02 Optuna RMSE (+edad_serie) 0.266
+  (referencias: OLS mágica 0.231 | AutoGluon 0.249 | v7 0.267)
+
+QUÉ FUNCIONÓ (FI por gain, modelo p01 0.250)
+  s2 38.9% | tn_0 17.9% | clientela ~12% (ncli_idx 6.3 + ncli_0 2.4 +
+  pendientes) | lags 13-24 ~3-4% | stacking OLS 1.6% | resto menor.
+  En el modelo Optuna L1: tn_0 38.1%, s2 23.1%, clientela 19.3%,
+  edad_serie 0.7%.
+
+CONCLUSIONES
+1. El spec del usuario rompió el techo del LGBM: 0.267 -> 0.250.
+   Ganadores: suavizado reciente (sumas) y dinámica de clientela (z601).
+2. L1 > RMSE en el LB (0.261 vs 0.266): la métrica de entrenamiento
+   alineada al WAPE paga — misma lección que AutoGluon RMSE del curso.
+3. Optuna volvió a empeorar el LB pese a mejorar lo local (0.250 fijo
+   vs 0.261 tuneado): 6ta inversión local/LB. Los params tuneados son
+   ultraconservadores (8 hojas, min_child 99) = ajustados al año viejo.
+4. edad_serie: aporte real pero menor (0.7%).
+5. La OLS sigue arriba (0.231); el LGBM 0.250 piensa distinto
+   (momentum+clientes vs estacionalidad feb) -> ensamble natural.
+
+PRÓXIMO PASO SUGERIDO (exp_v9)
+Ensamble OLS 0.231 + LGBM v8-p01 0.250 (+ AutoGluon 0.249): promedio
+simple y ponderado.

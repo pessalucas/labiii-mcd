@@ -1,0 +1,47 @@
+EXPERIMENTO v18 — Índice estacional por categoría (features se_*)
+Fecha: 2026-08-02
+
+SPEC (ESPECIFICACION_variables.md, origen exp_v17)
+Ancla estacional pooleada por categoría cat3 con shrinkage jerárquico
+(global->cat2->cat3, kappa=20) y ANTI-FUGA, en unidades de clase_ratio.
+Objetivo: capturar el componente estacional de febrero de los top-movers
+que ni OLS ni LGBM capturan. Sumar a ambos modelos (LGBM feature + pata).
+
+QUÉ SE HIZO
+- p01_features_estacional.py: genera features_estacional.parquet (5 feats:
+  se_factor, se_factor_c2, se_factor_glob, se_dev_c3, se_n_c3) por
+  (product_id, corte). Validado:
+  * cordura C=201812: global 0.74, Sopas 0.38, PISOS 1.07 (orden y
+    magnitud esperados; el spec citaba ~0.83/0.34/1.12 con 2 años, acá 1).
+  * anti-fuga: ✓ ningún target > corte.
+- p02_integracion.py: v11+cat3+ocurrencia_v16 + se_* (144 feats). Params
+  fijos + v11opt. 2 submits del LGBM. Luego ensamble OLS+LGBM-v18.
+
+RESULTADOS (Kaggle)
+  LGBM v18 fijo:    0.232   (v16 sin se_ fue 0.235: se_* MEJORA el LGBM solo)
+  LGBM v18 v11opt:  0.233
+  se_* gain: ~0.9% (se_factor_glob 0.6% la principal; el resto <0.2%)
+  backtest fijo:    0.2289  (mejor que v16 0.2363)
+  ENSAMBLE OLS70/LGBMv18-30: 0.228
+  ENSAMBLE OLS65/LGBMv18-35: 0.228
+  (ensamble con pata v16 seguía siendo 0.227)
+
+CONCLUSIONES
+1. Las se_* MEJORAN el LGBM standalone (0.235->0.232): el spec acertó,
+   hay señal estacional que al LGBM le faltaba. Poco gain (0.9%) pero
+   efecto real y consistente (backtest y LB).
+2. PERO el ENSAMBLE empeoró (0.227->0.228). Hallazgo clave: en un ensamble
+   importa la DIVERSIDAD, no la calidad de la pata. La OLS mágica YA capta
+   estacionalidad; darle se_* al LGBM lo acerca a la OLS -> menos
+   decorrelación -> el promedio aporta menos. Una pata mejor pero más
+   parecida rinde peor en el ensamble.
+3. El GANADOR NO cambia: sigue ensamble OLS70/LGBM-v16-30 = 0.227 (puesto 3).
+   La pata v16 es "peor" sola (0.235) pero más ortogonal a la OLS.
+
+PENDIENTE (spec §5, no ejecutado): 3ra pata de ensamble con predicción
+estacional pura (prom*se_factor). Dado que se_* ya está en el LGBM y el
+ensamble no mejoró, expectativa baja; requeriría re-optimizar pesos de 3
+patas. No se hizo por frugalidad de submits.
+
+ARTEFACTOS: features_estacional.parquet, feature_importance_integracion.txt,
+los CSV de LGBM y ensambles.

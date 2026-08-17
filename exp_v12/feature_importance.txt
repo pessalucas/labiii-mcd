@@ -1,0 +1,16 @@
+exp_v12 - FI del clasificador de ocurrencia (gain %)
+
+freq12         57.0
+gap_prom       20.1
+c_log_tn        5.3
+c_idx           5.1
+recencia        4.5
+mes_obj         3.0
+q_log_prom      1.7
+freq3           0.8
+monto_mean      0.7
+freq6           0.7
+monto_s3        0.7
+racha_ceros     0.2
+compro_t0       0.1
+compro_t1       0.0

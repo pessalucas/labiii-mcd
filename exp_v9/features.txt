@@ -1,0 +1,100 @@
+EXPERIMENTO v9 — Diccionario de features del LGBM final (84 features)
+Fecha: 2026-08-02
+Script: p01_ensamble_lgbm_ols.py | Modelo: exp_v9_lgbm_final.csv (Kaggle 0.264)
+
+Convenciones:
+  C = mes del corte (se predice C+2). prom = promedio de tn de los
+  últimos 12 meses del producto. Salvo indicación, todo está
+  normalizado por prom (adimensional, escala propia del producto).
+  NaN = la ventana no existe para ese producto (LGBM lo maneja nativo).
+  TARGET: clase_ratio = tn(C+2) / prom. Predicción = ratio * prom.
+
+-------------------------------------------------------------------
+LAGS (24)                                            tn_0 .. tn_23
+-------------------------------------------------------------------
+Ventas mensuales hacia atrás desde el corte, /prom.
+  tn_0  = mes del corte C          tn_12 = mismo mes, año anterior
+  tn_1  = C-1 ... tn_11 = C-11     tn_13..tn_23 = 2do año (NaN si no existe)
+
+-------------------------------------------------------------------
+RATIOS RECIENTES (6)                                 clip [0, 10]
+-------------------------------------------------------------------
+  r_0_1       tn_0/tn_1                (momentum mensual)
+  r_1_2       tn_1/tn_2
+  r_02_34     (tn_0+tn_2)/(tn_3+tn_4)
+  r_tri       (tn_0+tn_1+tn_2)/(tn_3+tn_4+tn_5)
+  r_sem       suma(tn_0..5)/suma(tn_6..11)
+  r_yoy_tri   (tn_0+tn_1+tn_2)/(tn_12+tn_13+tn_14)   interanual
+
+-------------------------------------------------------------------
+DIFFS CONSECUTIVOS (8)
+-------------------------------------------------------------------
+  diff_0_1 .. diff_5_6   tn_k - tn_{k+1} para k=0..5
+  diff_0_2               tn_0 - tn_2
+  diff_0_12              tn_0 - tn_12 (interanual; NaN sin 2do año)
+
+-------------------------------------------------------------------
+SUMAS / MEDIAS MÓVILES ANCLADAS AL CORTE (4)
+-------------------------------------------------------------------
+  s2, s3, s6, s12        promedio móvil de los últimos k meses /prom
+                         (s2 = feature más importante del modelo: 42% gain)
+
+-------------------------------------------------------------------
+ROLLING STATS (12)                                   ventanas 3/6/12
+-------------------------------------------------------------------
+  roll_std_k             desvío de los últimos k meses
+  roll_min_k             mínimo
+  roll_max_k             máximo
+  roll_med_k             mediana
+
+-------------------------------------------------------------------
+MEDIAS MÓVILES DESPLAZADAS Y CRUCES (7)
+-------------------------------------------------------------------
+  ma3_lag3/6/9           MA de 3 meses, desplazada 3/6/9 meses atrás
+  ma6_lag6               MA de 6 meses, desplazada 6 meses
+  cruce_ma3_ma12         MA corta actual / MA larga (señal de cruce)
+  acel_ma3               MA3 actual - MA3 de hace 3 meses (aceleración)
+  cruce_ma6              MA6 actual / MA6 anterior
+
+-------------------------------------------------------------------
+DIFFS VS EXTREMOS Y PROMEDIO (9)                     ventanas 6/12/24
+-------------------------------------------------------------------
+  dmin_k                 tn_0 - mínimo de la ventana k
+  dmax_k                 tn_0 - máximo de la ventana k
+  dprom_k                tn_0 - promedio de la ventana k
+                         (la de 24 usa lo disponible del 2do año)
+
+-------------------------------------------------------------------
+TENDENCIAS (3)
+-------------------------------------------------------------------
+  pend_3/6/12            pendiente de la recta ajustada a los últimos
+                         k lags normalizados (tiempo ascendente;
+                         NaN si la ventana no existe)
+
+-------------------------------------------------------------------
+CLIENTELA (7) — pista de z601, del sell-in por cliente
+-------------------------------------------------------------------
+  ncli_0                 nº de clientes distintos del mes del corte [conteo]
+  ncli_prom              promedio de clientes de 12 meses [conteo]
+  ncli_idx               ncli_0/ncli_prom (gana o pierde bocas)
+  basket_idx             compra promedio por cliente del mes vs histórica
+  ncli_pend_3/6/12       pendiente del nº de clientes normalizado
+
+-------------------------------------------------------------------
+EDAD Y FORMA (2)
+-------------------------------------------------------------------
+  edad_serie             meses con datos de la serie al corte [conteo]
+  cv                     desvío de los 12 lags normalizados (volatilidad)
+
+-------------------------------------------------------------------
+FLAGS DE RÉGIMEN (2)
+-------------------------------------------------------------------
+  anio_corte             año del corte (2018/2019) — quiebre macro
+  mes_corte              mes del corte (1..12) — corrector estacional
+
+-------------------------------------------------------------------
+NOTA (hallazgo de v9): este set de 84 empeoró al LGBM solo vs el set
+de 50 de v8 (0.264 vs 0.250) por redundancia — muchas variantes de
+"dónde está tn_0 vs su historia" cuentan lo mismo que s2/roll_med_3.
+El set óptimo conocido del LGBM es el de exp_v8 (ver su summary.txt).
+El ensamble OLS 80% + LGBM 20% dio 0.232 con cualquiera de las patas.

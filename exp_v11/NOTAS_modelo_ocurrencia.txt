@@ -1,0 +1,43 @@
+IDEA (usuario, 2026-08-02): MODELO DE OCURRENCIA — hurdle / two-part
+==================================================================
+
+CONCEPTO
+Separar la predicción del par cliente-producto en dos:
+  E[venta_par] = P(compra) x E[monto | compra]
+- P(compra): clasificador binario "¿el cliente c compra el producto p
+  en t+2?". Debe crecer con el gap desde la última compra (un cliente
+  que compra cada 3 meses -> prob alta en mes 3, mayor en mes 4).
+- monto | compra: promedio del PAR cuando compra (OJO: del par, NO el
+  total del cliente — un cliente grande compra poco de un producto dado).
+
+USO (clave): NO como predicción final (el piloto de pares agregado dio
+0.29 vs OLS 0.18), sino como FEATURE AGREGADA del modelo de producto
+(que está en 0.240). Misma estrategia que funcionó con las features de
+categoría en v11 (0.250 -> 0.240): inyectar señal nueva sin heredar el
+ruido fino.
+
+FEATURES A GENERAR (agregadas a nivel producto x corte)
+  occ_demanda_esp  = sum_clientes P(compra_cp) x monto_par_cp
+                     (estimación de tn del producto vía ocurrencia)
+  occ_n_esperados  = sum_clientes P(compra_cp)
+                     (nº esperado de compradores; = ncli_idx PREDICTIVO)
+  opcional: occ_demanda_esp / prom12  (versión normalizada)
+
+IMPLEMENTACIÓN
+- Panel cliente x producto x corte con ceros (lógica z601 / piloto v11).
+- Features del clasificador: recencia, frecuencia (3/6/12), gap
+  promedio, racha de ceros, mes objetivo, features del cliente y del
+  producto. (Ya construidas en p00_piloto_pares.py.)
+- LGBM objective='binary', target = (compró en t+2). ~millones de filas,
+  ~1h. Validar calibración (reliability) pero tolerante: el modelo de
+  producto recalibra.
+- monto_par: media del par cuando compra en los últimos 12m (simple) o
+  un 2º LGBM de magnitud condicional.
+- Agregar a producto, joinear al pipeline v11.
+
+RIESGOS
+- Calibración de P (mitigado por uso como feature).
+- Costo (~1h). Hacer piloto 10% primero, como en el enfoque de pares.
+- Posible redundancia con ncli_* y features de par ya probadas.
+
+ESTADO: pendiente. Sería exp_v12 o feature extra de v11.

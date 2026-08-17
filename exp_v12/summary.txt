@@ -1,0 +1,46 @@
+EXPERIMENTO v12 — Modelo de OCURRENCIA (hurdle) como feature del producto
+Fecha: 2026-08-02
+
+PREGUNTA
+¿Un modelo de ocurrencia cliente-producto (P(compra) x monto del par,
+agregado a producto) aporta como feature al modelo de producto v11?
+Idea del usuario: two-part / hurdle model para demanda intermitente.
+
+QUÉ SE HIZO
+- p01_modelo_ocurrencia.py: LGBM binario sobre 374.439 pares
+  cliente-producto (panel con ceros). Features: recencia, frecuencia
+  3/6/12, gap promedio, racha de ceros, monto del par, contexto cliente
+  y producto. 2-fold TEMPORAL para generar la feature sin fuga + modelo
+  full para el futuro. Genera occ_n_esperados, occ_demanda_esp,
+  occ_demanda_norm por (producto, corte).
+  ARTEFACTOS GUARDADOS (reutilizables): modelo_ocurrencia_full.{txt,pkl},
+  features_ocurrencia.parquet, feature_importance.txt, hiperparametros.json,
+  metricas.txt.
+- p02_integracion.py: pipeline v11 (136 feats) + las 3 occ_* = 139 feats.
+  Reusó la hiperparametría óptima de v11 (no re-tuneo: solo cambian 3
+  features). 2 submits.
+
+RESULTADOS
+  clasificador ocurrencia: AUC 0.787, tasa base compra 0.290
+  FI ocurrencia: freq12 57% + gap_prom 20% dominan (= la intuición del
+    usuario: cada cuánto compra y hace cuánto no).
+  corr(occ_demanda_esp, venta real) = 0.976 (pero dominada por ESCALA)
+  integración: backtest 0.2395 -> 0.2363 (leve mejora)
+               Kaggle v11 0.240 -> v12 0.242 (empate/leve peor)
+  occ_* en el modelo de producto: solo 0.7-1.1% del gain (pos 20-81)
+
+CONCLUSIONES
+1. La ocurrencia NO aporta como feature del producto: su señal está
+   SUBSUMIDA por las features de clientela ya presentes (ncli_0,
+   ncli_idx, ncli_pend_*) que resumen la misma dinámica a nivel
+   agregado. Mismo patrón que el request en v7.
+2. La corr 0.976 engañaba: era escala (productos grandes), que el modelo
+   ya captura vía tn_0/s2/prom. La señal MARGINAL nueva es mínima.
+3. El hurdle está bien ejecutado (AUC 0.79) y los artefactos quedan
+   reutilizables, pero no mejora el objetivo actual.
+4. Mejor LGBM sigue siendo v11 (0.240); mejor overall sigue siendo el
+   ENSAMBLE OLS80/LGBMv11-20 (0.228). v12 no aporta diversidad al
+   ensamble (es v11 + ruido), así que no cambia la recomendación final.
+
+DECISIÓN: no incorporar ocurrencia. Candidatas finales sin cambios:
+ensamble 0.228 + OLS pura 0.231.

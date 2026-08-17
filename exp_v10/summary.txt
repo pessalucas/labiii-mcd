@@ -1,0 +1,46 @@
+EXPERIMENTO v10 — Set limpio + stacking OLS reincorporado + categorías
+Fecha: 2026-08-02
+
+PREGUNTA
+¿El LGBM recupera (o supera) el 0.250 de v8 combinando: el set limpio
+post-auditoría (76 features sin duplicados algebraicos), el stacking
+OLS que v9 había quitado, y las categorías cat1/cat2/cat3 como
+features categóricas nativas (cat3 con >10 productos, resto OTROS)?
+
+QUÉ SE HIZO
+- p01_lgbm_stack_cats.py sobre pruebas/features_lgbm.py (FeatureBuilder
+  canónico) + pred_ols_yoy/rec + cat1 (4 niveles), cat2 (15), cat3
+  (83 -> 26 con >10 productos + OTROS). 81 features, 18.706 filas.
+- Auditoría automática: limpia.
+- Optuna 30 trials (regla) + params fijos v8. 2 submits (regla).
+- Bug corregido en el camino: el maestro de productos ya tiene un nivel
+  llamado "OTROS" -> duplicado en pd.Categorical (fix: unión de sets).
+
+RESULTADOS (Kaggle público)
+  v10 fijo    0.270   (local multi-corte 0.260)
+  v10 optuna  0.266   (local 0.252) <- 1ra vez que optuna gana al fijo
+  refs: v8-p01 0.250 | v9 0.261-0.264 | OLS 0.231
+
+CONCLUSIONES
+1. NO recuperó el 0.250: la combinación limpieza+stacking+categorías
+   empeoró incluso a v9. El mejor LGBM sigue siendo v8-p01 (50 feats).
+2. Culpable probable: las categóricas de alta cardinalidad. cat3 fue la
+   feature MÁS spliteada (793 splits) con solo 2.5% de gain; cat2 igual
+   (487/1.7%). Los árboles usan los 27 niveles para memorizar el train.
+3. El stacking reincorporado quedó en ~1.2% de gain: no mueve la aguja.
+4. Ley empírica tras 5 iteraciones de LGBM: todo agregado posterior al
+   set v8 empeora o empata. El presupuesto de complejidad del dataset
+   (~1050 productos reales) se agota en ~50 features.
+5. La pregunta de atribución de v9 (¿bloat o falta de stacking?) queda
+   respondida indirectamente: era bloat, y el stacking no compensa.
+
+IMPLICACIÓN ESTRATÉGICA
+El filón "LGBM producto-mes con features de la serie" está agotado a
+0.250. Para mejorar el 0.231/0.232 hace falta otra fuente de señal:
+el candidato natural es modelar a nivel CLIENTE x PRODUCTO (dataset
+z601 con ceros, ~20M filas) y agregar las predicciones a producto —
+probablemente lo que hicieron los scores 0.217-0.224 del leaderboard.
+
+SCORES ACUMULADOS
+0.231 OLS | 0.232 ensamble w80 | 0.250 LGBM v8 | 0.261-0.264 v9 |
+0.266-0.270 v10

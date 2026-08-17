@@ -1,0 +1,43 @@
+EXPERIMENTO v13 — cat4 (sustitución tamaño+sabor) en ambos modelos
+Fecha: 2026-08-02
+
+IDEA (usuario): crear una cat4 que agrupe productos sustituibles (mismo
+producto en distinto TAMAÑO y SABOR, misma marca) = (cat2, brand), y
+sumarla a ambos modelos:
+  - modelo de producto: features c4_*/sh4_* (como cat3 en v11)
+  - clasificador de ocurrencia: señal de SUSTITUCIÓN (el cliente compró
+    otro producto del cat4 en lugar de este)
+
+QUÉ SE HIZO
+- cat4 = (cat2, brand): 58 grupos. Validada: reduce el CV mediano 31%
+  al agregar (vs 10% solo-tamaños), prueba de que agrupa sustitutos
+  reales. Mapping en pruebas/cat4_mapping.parquet.
+- p01_features_cat4.py: 54 features (c4_* maquinaria + sh4_* penetración).
+- p02_ocurrencia_cat4.py: clasificador + 6 features de sustitución
+  (cli4_freq12/recencia/activo_t0, share_pc4, sustituto_3m, cli4_idx).
+  AUC 0.789 (vs 0.787 sin cat4); sustitución = 3.4% del gain.
+- p03_integracion.py: pipeline v11 + cat3 + cat4 + occ = 193 features.
+  Reusó hiperparametría v11. 2 submits.
+
+RESULTADOS
+  backtest: fijo 0.2350 (MEJOR de todos) | v11opt 0.2355
+  Kaggle:   fijo 0.253 | v11opt 0.248  (PEOR: v11 era 0.240)
+  gain cat4 en el producto: 8.8-11.9% (alto) | occ: 0.7%
+
+CONCLUSIONES
+1. cat4 NO mejora: mayor divergencia local/LB del proyecto (0.235 vs
+   0.248). Backtest mejora, Kaggle empeora = sobreajuste puro.
+2. Causa: cat4 se SOLAPA con cat3 (ambas "contexto de familia"). Su
+   gain alto (11.9%) es crédito ROBADO a cat3, no señal nueva neta.
+   Sumar ambas infla el modelo a 193 features -> varianza.
+3. La sustitución en el clasificador aporta poco (3.4%): freq12/gap_prom
+   ya capturan el patrón; que el sustituto sea del cat4 agrega poco.
+4. La idea de negocio es correcta (cat4 reduce CV 31%, es informativa),
+   pero como FEATURE encima de cat3 es redundante. Mismo patrón v9/v10/v12.
+
+PENDIENTE / ALTERNATIVA (no ejecutada, requiere decisión):
+  Probar cat4 EN LUGAR de cat3 (no además) — quizás cat4 sola > cat3
+  sola sin el bloat. 1 corrida, 1-2 submits.
+
+ESTADO: mejor sigue siendo ENSAMBLE OLS80/LGBMv11-20 = 0.228.
+cat4_mapping.parquet y modelos quedan como artefactos reutilizables.

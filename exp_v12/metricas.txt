@@ -1,0 +1,9 @@
+exp_v12 - modelo de ocurrencia (hurdle)
+
+panel: 374439 pares
+AUC (train early -> eval late): 0.7870
+tasa base de compra (t+2): 0.2901
+corr(occ_demanda_esp, venta real) @dic18->feb19: 0.976
+hiperparametros: {'objective': 'binary', 'random_state': 102191, 'verbosity': -1, 'n_estimators': 300, 'learning_rate': 0.05, 'num_leaves': 48, 'min_child_samples': 100, 'colsample_bytree': 0.8, 'subsample': 0.8, 'subsample_freq': 1}
+features del clasificador: ['recencia', 'freq3', 'freq6', 'freq12', 'gap_prom', 'racha_ceros', 'compro_t0', 'compro_t1', 'monto_mean', 'monto_s3', 'mes_obj', 'c_log_tn', 'c_idx', 'q_log_prom']
+salida (features_ocurrencia.parquet): occ_n_esperados, occ_demanda_esp, occ_demanda_norm x (product_id, corte)

@@ -1,0 +1,62 @@
+EXPERIMENTO v11 — Features de categoría (cat3) + penetración sobre v10
+Fecha: 2026-08-02
+
+PREGUNTA
+¿Enriquecer el LGBM v10 con la maquinaria completa (lags/diffs/ratios/
+sumas/rolling/tendencias) aplicada a la SUMA de la categoría cat3 de
+cada producto, más ratios de penetración (share del producto en su
+categoría y su evolución), mejora el modelo?
+
+QUÉ SE HIZO
+- p01_features_categoria.py: genera features_categoria.parquet
+  (22.384 filas producto x corte, 55 features):
+  * c3_* (39): maquinaria completa sobre la serie de la categoría cat3
+  * sh_* (16): share del producto en su cat3, promedio, MA, aceleración,
+    yoy, pendientes 3/6/12 (penetración)
+  Auditado: la suma cuadra con miembros, shares en [0,1], sin duplicados.
+- p02_entrenamiento.py: pipeline v10 (76 limpias + 2 stacking + 3 cats)
+  + join del parquet -> 136 features. Optuna 30 + fijo. 2 submits.
+
+RESULTADOS
+  backtest local: v10 0.2597 -> v11 fijo 0.2395 -> v11 optuna 0.2321
+  Kaggle:         v11 fijo 0.240 | v11 optuna 0.240
+  (LGBM anterior mejor: v8 0.250 | OLS 0.231 | ensamble w80 0.232)
+
+CONCLUSIONES
+1. PRIMERA vez que features nuevas MEJORAN el LGBM (0.250 -> 0.240) en
+   vez de empeorar. Rompe la "ley de bloat" de v9/v10: la señal de
+   categoría es genuinamente nueva, no redundante con la del producto.
+2. Las features c3_*/sh_* capturan 13-16% del gain. En el FI aparecen
+   c3_tn_10, c3_tn_22, c3_ma3_lag3 (lags de la serie-categoría) en el
+   top 15 sostenidamente. La penetración (sh_*) aporta menos que el
+   contexto de categoría (c3_*).
+3. Optuna: local 0.2321 (casi = OLS) pero Kaggle 0.240 = fijo. Otra
+   divergencia local/LB, pero esta vez el salto de features fue real
+   en ambos.
+4. El LGBM (0.240) sigue por debajo de OLS (0.231), pero la brecha se
+   achicó de 0.019 a 0.009. Y ahora es una pata MUCHO más fuerte para
+   el ensamble.
+
+PRÓXIMO PASO
+- Rehacer el ensamble OLS + LGBM-v11 (pata mejorada) -> puede bajar de
+  0.232.
+- Modelo de OCURRENCIA (idea del usuario): two-part / hurdle model a
+  nivel cliente-producto. P(compra) x monto esperado, agregar a
+  producto, usar como feature. Ver nota en NOTAS_modelo_ocurrencia.txt.
+
+-------------------------------------------------------------------
+ENSAMBLE (p03_ensamble.py) — OLS + LGBM v11
+-------------------------------------------------------------------
+Backtest local dic18->feb19: OLS 0.249, LGBM-v11 0.222, mejor mezcla
+local 0.90 LGBM (WAPE 0.221). PERO Kaggle:
+  ens OLS10/LGBM90 (el que eligió el backtest): 0.237
+  ens OLS80/LGBM20 (el "seguro"):               0.228  <- MEJOR
+7ma divergencia local/LB: el backtest sobrevalora al LGBM (brilla en
+feb-2019, no en feb-2020). El ensamble quiere POCA dosis de LGBM.
+
+>>> 0.228 = MEJOR SCORE DEL PROYECTO. Rompe el 0.231 de la OLS.
+    Ranking: puesto 3-4 (top: 0.217, 2do 0.224). Salió del pelotón
+    de 0.231 (~15 personas con el notebook del profesor).
+
+SUBMISSIONS CANDIDATAS FINALES: OLS80/LGBMv11-20 (0.228) + OLS pura
+(0.231, seguro por menor varianza).

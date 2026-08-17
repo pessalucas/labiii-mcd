@@ -1,0 +1,89 @@
+EXPERIMENTO v7 — Feature Importance del LGBM final (optuna30, nivel 3)
+Fecha: 2026-08-02
+Modelo: LGBMRegressor objective='l1', target = tn(t+2)/promedio_12m,
+        train = todos los productos x 22 cortes (201801..201910), 18.440 filas.
+Params optuna (30 trials, WAPE multi-corte 0.2500): n_estimators=283,
+lr=0.0137, num_leaves=41, min_child_samples=60, colsample=0.63, subsample=0.70.
+Score Kaggle: 0.274 (sin tunear, nivel 2: 0.267 | OLS mágica: 0.231).
+
+=========================================================================
+DESCRIPCIÓN DE LAS FEATURES USADAS
+=========================================================================
+Todas escaladas por producto (adimensionales) salvo los flags.
+"corte" = mes t desde el cual se predice t+2. prom = promedio de tn_0..tn_11.
+
+LAGS NORMALIZADOS (13)
+  tn_0 .. tn_11   ventas de los 12 meses hasta el corte inclusive,
+                  divididas por prom (tn_0 = mes del corte, tn_1 = mes
+                  anterior, ... tn_11 = 11 meses atrás).
+  tn_12           mismo mes calendario que el corte, un año antes / prom.
+
+FORMA DE LA SERIE (1)
+  cv              desvío estándar de tn_0..tn_11 normalizados
+                  (volatilidad relativa del producto).
+
+PICO ESTACIONAL / REBOTE (4) — nivel 2
+  rebote_hist     tn_10 / tn_12 (clip 10): cuánto valió el MES OBJETIVO
+                  respecto del MES DEL CORTE hace un año. Para el corte
+                  dic: el rebote dic->feb histórico del producto.
+  momentum        tn_0 / tn_1 (clip 10): acelerando o frenando al corte.
+  idx_objetivo    tn_10 / prom: fuerza del mes objetivo del año pasado
+                  vs nivel medio del producto.
+  idx_actual      tn_0 / prom: nivel del mes del corte vs nivel medio.
+
+DEMANDA INSATISFECHA (2) — nivel 3
+  req_gap_0       (cust_request_tn - tn) del mes del corte / prom:
+                  quiebre de stock reciente (pedido no entregado).
+  req_gap_3m      ídem, promedio de los últimos 3 meses.
+
+FLAGS DE RÉGIMEN (2)
+  anio_corte      año del corte (2018/2019): permite separar regímenes
+                  macro.
+  mes_corte       mes del corte (1..12): corrector estacional genérico.
+
+=========================================================================
+FEATURE IMPORTANCE (modelo final, ordenado por gain)
+=========================================================================
+gain = reducción total de error aportada | splits = veces usada para partir
+
+                  gain  splits  gain_pct
+tn_0          232476.0     903      45.2
+idx_actual     78857.0     305      15.3
+tn_1           41268.0     833       8.0
+mes_corte      34888.0    1083       6.8
+tn_2           15477.0     683       3.0
+cv             13994.0     663       2.7
+tn_3           11213.0     540       2.2
+momentum        9441.0     530       1.8
+tn_4            8091.0     558       1.6
+tn_5            7441.0     539       1.4
+tn_9            7163.0     514       1.4
+anio_corte      6608.0     279       1.3
+tn_8            6410.0     507       1.2
+tn_11           6152.0     491       1.2
+tn_12           6092.0     538       1.2
+tn_7            5947.0     513       1.2
+tn_10           5837.0     426       1.1
+rebote_hist     4940.0     414       1.0
+tn_6            4813.0     413       0.9
+req_gap_3m      3124.0     290       0.6
+idx_objetivo    2141.0     147       0.4
+req_gap_0       1500.0     151       0.3
+
+=========================================================================
+LECTURA
+=========================================================================
+1. El 60% del gain está en "dónde está el producto HOY": tn_0 (45%) +
+   idx_actual (15%). El LGBM es un modelo de momentum inteligente, con
+   mes_corte (la feature más spliteada: 1083) como corrector estacional.
+2. Las features diseñadas contra el defecto diagnosticado (subestimar el
+   rebote dic->feb) fueron IGNORADAS: rebote_hist 1.0%, idx_objetivo
+   0.4%, req_gap 0.9% combinado.
+3. Contraste con la OLS mágica (0.231): sus coeficientes significativos
+   son noviembre, feb-previo, marzo y junio — y diciembre NO significa
+   nada (t=0.4). Ponderan meses OPUESTOS: la OLS aprendió el examen
+   dic->feb; el LGBM, entrenado en 22 saltos genéricos t->t+2, aprendió
+   lo que sirve en promedio para cualquier mes (el mes actual), que es
+   justo lo que menos sirve para febrero.
+4. Implicación: errores estructuralmente decorrelacionados entre OLS y
+   LGBM -> candidato ideal a ensamble (propuesta exp_v8).

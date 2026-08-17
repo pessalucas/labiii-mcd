@@ -1,0 +1,51 @@
+EXPERIMENTO v9 — Ensamble OLS + LGBM independiente (con DIFFs, rolling,
+medias móviles y diffs vs extremos/promedio)
+Fecha: 2026-08-02
+
+PREGUNTA
+¿Promediar dos tecnologías independientes (OLS mágica + LGBM sin
+información de la OLS) mejora el 0.231? ¿Aportan los DIFFs, rolling
+stats, medias móviles desplazadas y diffs vs min/max/promedio?
+
+QUÉ SE HIZO (p01_ensamble_lgbm_ols.py, iterado en 4 tandas por spec
+incremental del usuario)
+- LGBM: feature set v8 SIN pred_ols_* + agregados:
+  * diffs consecutivos diff_0_1..diff_5_6, diff_0_2, diff_0_12
+  * rolling std/min/max/mediana de 3/6/12
+  * medias móviles desplazadas ma3_lag3/6/9, ma6_lag6 + cruces
+    (ma3/ma12, aceleración de ma3) [pedido: "medias móviles"]
+  * dmin/dmax 6/12/24: tn_0 - min/max de la ventana [pedido]
+  * dprom 6/12/24: tn_0 - promedio de la ventana [pedido]
+  -> 84 features finales. Params fijos v8 (sin Optuna, por spec).
+- OLS: réplica exacta z403 (lags por fila, 182 mágicos @201812).
+- Ensambles: 50/50, ponderados 70/30 y 80/20, y con la pata LGBM de v8
+  (0.250) en 50/60/70.
+
+RESULTADOS (Kaggle público)
+  OLS sola                        0.231
+  ensambles w80 (todas las vers.) 0.232  <- a UNA MILESIMA
+  OLS70+LGBMv8                    0.232
+  OLS60+LGBMv8 / w70 v9           0.233
+  ensambles 50/50                 0.235-0.240
+  LGBM v9 solo:  diffs 0.261 | +MA 0.261 | +dmin/dmax 0.263 | +dprom 0.264
+  (LGBM v8, 50 features: 0.250)
+
+CONCLUSIONES
+1. El ensamble no batió a la OLS en el split público, pero empató
+   estadísticamente (0.232 vs 0.231 con LB de 3 decimales sobre una
+   fracción de productos). Por menor varianza, el w80 es candidato a
+   submission final de la competencia junto a la OLS pura.
+2. El 50/50 diluye a la pata fuerte; el peso óptimo está cerca de
+   0.8 OLS / 0.2 LGBM. Con la pata v8 (mejor LGBM) el óptimo baja a
+   ~0.7 — pata más fuerte tolera más peso.
+3. FEATURE BLOAT comprobado: cada tanda de features nuevas sobre el
+   mismo dataset empeoró el LGBM solo (0.250 v8 con 50 feats ->
+   0.261-0.264 v9 con 68-84). Las nuevas se usan (dprom_24 2.2% gain)
+   pero son redundantes con s2/roll_med_3 y desplazan señal útil.
+   El feature set de v8 queda como el óptimo del LGBM.
+4. FI final: s2 42.9%, tn_0 14%, ncli_idx 6.5%, roll_med_3 5.1%,
+   dprom_24 2.2%. Completo en feature_importance.txt.
+
+ESTADO DEL PROYECTO
+  0.231 OLS | 0.232 ensambles w80 | 0.250 LGBM v8 | 0.249 AutoGluon
+  El pelotón del curso sigue en 0.231; el top es 0.217.

@@ -1,0 +1,12 @@
+{
+  "objective": "binary",
+  "random_state": 102191,
+  "verbosity": -1,
+  "n_estimators": 300,
+  "learning_rate": 0.05,
+  "num_leaves": 48,
+  "min_child_samples": 100,
+  "colsample_bytree": 0.8,
+  "subsample": 0.8,
+  "subsample_freq": 1
+}
