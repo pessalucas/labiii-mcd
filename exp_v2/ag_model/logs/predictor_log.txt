@@ -1,0 +1,99 @@
+Beginning AutoGluon training... Time limit = 3600s
+AutoGluon will save models to '/Users/lucaspessagno/Desktop/Laboratorio 3/labo3-2026ba-main_v202608/pruebas/exp_v2/ag_model'
+=================== System Info ===================
+AutoGluon Version:  1.5.0
+Python Version:     3.12.13
+Operating System:   Darwin
+Platform Machine:   arm64
+Platform Version:   Darwin Kernel Version 25.5.0: Tue Jun  9 22:26:46 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T8103
+CPU Count:          8
+Pytorch Version:    2.9.1
+CUDA Version:       CUDA is not available
+GPU Count:          WARNING: Exception was raised when calculating GPU count (AssertionError)
+Memory Avail:       3.67 GB / 16.00 GB (22.9%)
+Disk Space Avail:   401.63 GB / 460.43 GB (87.2%)
+===================================================
+Setting presets to: best_quality
+
+Fitting with arguments:
+{'enable_ensemble': True,
+ 'eval_metric': WAPE,
+ 'freq': 'MS',
+ 'hyperparameters': 'default',
+ 'known_covariates_names': [],
+ 'num_val_windows': 2,
+ 'prediction_length': 2,
+ 'quantile_levels': [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+ 'random_seed': 102191,
+ 'refit_every_n_windows': 'auto',
+ 'refit_full': False,
+ 'skip_model_selection': False,
+ 'target': 'tn',
+ 'time_limit': 3600,
+ 'verbosity': 2}
+
+Provided train_data has 6368 rows, 182 time series. Median time series length is 36 (min=24, max=36). 
+Automatically setting refit_every_n_windows=1 based on num_val_windows
+
+Provided data contains following columns:
+	target: 'tn'
+
+AutoGluon will gauge predictive performance using evaluation metric: 'WAPE'
+	This metric's sign has been flipped to adhere to being higher_is_better. The metric score can be multiplied by -1 to get the metric value.
+===================================================
+
+Starting training. Start time is 2026-08-01 21:16:26
+Models that will be trained: ['SeasonalNaive', 'RecursiveTabular', 'DirectTabular', 'DynamicOptimizedTheta', 'Chronos2', 'Chronos2SmallFineTuned', 'AutoETS', 'ChronosWithRegressor[bolt_small]', 'TemporalFusionTransformer', 'DeepAR']
+Training timeseries model SeasonalNaive. Training for up to 325.8s of the 3583.6s of remaining time.
+	-0.2574       = Validation score (-WAPE)
+	2.32    s     = Training runtime
+	0.06    s     = Validation (prediction) runtime
+Training timeseries model RecursiveTabular. Training for up to 358.1s of the 3581.2s of remaining time.
+	-0.2894       = Validation score (-WAPE)
+	2.39    s     = Training runtime
+	0.01    s     = Validation (prediction) runtime
+Training timeseries model DirectTabular. Training for up to 397.6s of the 3578.8s of remaining time.
+	-0.2944       = Validation score (-WAPE)
+	3.37    s     = Training runtime
+	0.02    s     = Validation (prediction) runtime
+Training timeseries model DynamicOptimizedTheta. Training for up to 446.9s of the 3575.5s of remaining time.
+	-0.2491       = Validation score (-WAPE)
+	2.16    s     = Training runtime
+	0.08    s     = Validation (prediction) runtime
+Training timeseries model Chronos2. Training for up to 510.5s of the 3573.2s of remaining time.
+	-0.2282       = Validation score (-WAPE)
+	22.93   s     = Training runtime
+	0.34    s     = Validation (prediction) runtime
+Training timeseries model Chronos2SmallFineTuned. Training for up to 591.7s of the 3549.9s of remaining time.
+	-0.2241       = Validation score (-WAPE)
+	200.37  s     = Training runtime
+	0.14    s     = Validation (prediction) runtime
+Training timeseries model AutoETS. Training for up to 687.4s of the 3349.4s of remaining time.
+	-0.2439       = Validation score (-WAPE)
+	0.52    s     = Training runtime
+	0.49    s     = Validation (prediction) runtime
+Training timeseries model ChronosWithRegressor[bolt_small]. Training for up to 916.1s of the 3348.4s of remaining time.
+	Skipping covariate_regressor since the dataset contains no known_covariates or static_features.
+	Skipping covariate_regressor since the dataset contains no known_covariates or static_features.
+	-0.2407       = Validation score (-WAPE)
+	8.14    s     = Training runtime
+	0.88    s     = Validation (prediction) runtime
+Training timeseries model TemporalFusionTransformer. Training for up to 1369.7s of the 3339.4s of remaining time.
+	-0.2214       = Validation score (-WAPE)
+	110.86  s     = Training runtime
+	0.05    s     = Validation (prediction) runtime
+Training timeseries model DeepAR. Training for up to 2628.5s of the 3228.5s of remaining time.
+	-0.2191       = Validation score (-WAPE)
+	45.36   s     = Training runtime
+	0.08    s     = Validation (prediction) runtime
+Fitting 1 ensemble(s), in 1 layers.
+Training ensemble model WeightedEnsemble. Training for up to 3183.0s.
+	Ensemble weights: {'AutoETS': 0.25, 'DeepAR': 0.11, 'SeasonalNaive': 0.27, 'TemporalFusionTransformer': 0.36}
+	-0.1929       = Validation score (-WAPE)
+	0.25    s     = Training runtime
+	0.68    s     = Validation (prediction) runtime
+Training complete. Models trained: ['SeasonalNaive', 'RecursiveTabular', 'DirectTabular', 'DynamicOptimizedTheta', 'Chronos2', 'Chronos2SmallFineTuned', 'AutoETS', 'ChronosWithRegressor[bolt_small]', 'TemporalFusionTransformer', 'DeepAR', 'WeightedEnsemble']
+Total runtime: 409.76 s
+Best model: WeightedEnsemble
+Best model score: -0.1929
+Model not specified in predict, will default to the model with the best validation score: WeightedEnsemble

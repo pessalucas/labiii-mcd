@@ -1,0 +1,27 @@
+EXPERIMENTO F — Calibración del sesgo sistemático
+Fecha: 2026-08-02
+
+HALLAZGO ORIGEN (exp_v17): el LGBM sub-predice el total ~10% (conservador).
+El ensamble 70/30 hereda parte: sesgo sum(real)/sum(pred)=1.073 en backtest.
+
+QUÉ SE HIZO
+- Backtest dic18->feb19 (reconstruido 70/30 desde v17): barrido de factor
+  multiplicativo c. Óptimo local c=1.03 (WAPE 0.1938->0.1926). Corregir
+  todo el sesgo (1.073) pasa de largo: el WAPE se minimiza con corrección
+  suave, no completa.
+- Aplicado c a la submission ganadora (exp_v16_ens_w70.csv, 0.227).
+
+RESULTADOS (Kaggle)
+  factor 1.03: 0.226   <<< NUEVO MEJOR (mejora sobre 0.227)
+  factor 1.05: 0.227   (se pasa)
+
+CONCLUSIONES
+1. La calibración de sesgo FUNCIONA: 0.227 -> 0.226. Mejora barata, sin
+   features nuevas, atacando algo medido (el sesgo conservador del LGBM).
+2. El óptimo (1.03) es MENOR que el sesgo total (1.073): el WAPE ponderado
+   se minimiza corrigiendo parcialmente, no del todo.
+3. Raro acierto local->LB: el backtest eligió 1.03 y en Kaggle fue el mejor.
+   El sesgo de nivel es más estable entre años que el ranking fino.
+
+GANADOR ACTUALIZADO: exp_v16_ens_w70 x 1.03 = 0.226 (puesto 3).
+Nota: actualizar el paquete GANADOR con el factor de calibración.

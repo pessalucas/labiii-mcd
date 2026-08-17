@@ -1,0 +1,104 @@
+================================================================================
+CONTEXTO DEL PROYECTO — Laboratorio 3, competencia de forecasting (Kaggle)
+Handoff para otro agente. Actualizado: 2026-08-02
+================================================================================
+
+## EL PROBLEMA
+- Competencia Kaggle: labo-iii-2026-ba (Maestría Ciencia de Datos, Univ. Austral).
+- Objetivo: predecir las toneladas (tn) vendidas de 780 productos en FEBRERO 2020
+  (periodo 202002), con datos de sell-in hasta DICIEMBRE 2019. Es un salto t+2
+  (de diciembre se predice febrero, salteando enero).
+- Entregable: CSV con columnas product_id, tn (780 filas).
+- MÉTRICA (verificada empíricamente, submit de ceros da 1.000): WAPE / Total
+  Forecast Error = sum(|real - pred|) / sum(real). Ponderada por toneladas:
+  los productos grandes dominan el score. Objetivo L1/absoluto, NO cuadrático.
+
+## SETUP LOCAL (todo corre local, sin Colab)
+- Proyecto: /Users/lucaspessagno/Desktop/Laboratorio 3/labo3-2026ba-main_v202608
+- venv: .venv (Python 3.12 vía uv). Ejecutar: .venv/bin/python <script>
+- Datasets en datasets/: sell-in.txt.gz (2.9M filas: periodo, customer_id,
+  product_id, plan_precios_cuidados, cust_request_qty, cust_request_tn, tn),
+  tb_productos.txt (cat1>cat2>cat3, brand, sku_size, descripcion),
+  tb_stocks.txt (solo 201810-201912), product_id_apredecir201912.txt (los 780).
+- Kaggle: token en ~/.kaggle/access_token. Submit:
+  .venv/bin/kaggle competitions submit -c labo-iii-2026-ba -f <csv> -m "<msg>"
+  Ver scores: .venv/bin/kaggle competitions submissions -c labo-iii-2026-ba
+  Leaderboard: .venv/bin/kaggle competitions leaderboard -c labo-iii-2026-ba --show
+- lightgbm necesita libomp: ya está el symlink a la copia de torch (no tocar).
+
+## INFRAESTRUCTURA REUTILIZABLE (en pruebas/)
+- datos.py: cargar_sellin(), cargar_ventas(), cargar_productos(), cargar_apredecir().
+- features_lgbm.py: FeatureBuilder canónico. fb.armar_corte(cut, con_clase=True)
+  devuelve DataFrame con 76 features auditadas (lags 24 normalizados, ratios,
+  diffs, sumas s2/s3/s6, rolling, medias móviles, dmin/dmax/dprom, pendientes,
+  clientela ncli_*, edad, cv, flags) + clase_ratio + _prom. TARGET = ratio
+  tn(t+2)/promedio_12m; predicción final = ratio_pred * _prom.
+  fb.auditar(d) detecta features constantes/duplicadas (Spearman) — USARLO
+  antes de entrenar con features nuevas (evita degeneraciones tipo s12==1).
+- cat4_mapping.parquet: cat4 = (cat2, brand), agrupa productos sustituibles
+  (tamaño+sabor misma marca). product_id -> cat4, cat4_id.
+- exp_v11/features_categoria.parquet: features de cat3 (c3_*) y penetración (sh_*).
+- exp_v13/features_cat4.parquet: features de cat4 (c4_*) y penetración (sh4_*).
+- exp_v12/modelo_ocurrencia_full.pkl + features_ocurrencia.parquet: hurdle model.
+- lgbm_changelog.txt: evolución de todos los LGBM y sus scores.
+
+## HIPERPARAMETRÍA LGBM (objective='l1', el que transfiere mejor)
+- Fija razonable: n_estimators=400, learning_rate=0.03, num_leaves=31,
+  min_child_samples=30, colsample_bytree=0.8, subsample=0.8, subsample_freq=1.
+- "v11opt" (Optuna sobre v11): n_estimators=602, lr=0.0295, num_leaves=49,
+  min_child_samples=62, lambda_l1=1.4e-08, lambda_l2=0.536, colsample=0.729,
+  subsample=0.606. Reutilizable sin re-tunear cuando cambian pocas features.
+
+## MODELOS Y SCORES (Kaggle público)
+- 0.228  ENSAMBLE OLS 80% + LGBM-v11 20%  <<< MEJOR. Puesto 3-4 del leaderboard.
+- 0.231  OLS mágica (notebook z403 del profesor): regresión lineal con 12 lags,
+         entrenada en 182 "productos_magicos" (lista hardcodeada en z403), corte
+         201812->201902, fallback promedio 2019. Es el "pelotón" (~15 personas).
+- 0.240  LGBM v11: FeatureBuilder + stacking OLS + categóricas cat1/2/3 + features
+         de categoría cat3 (c3_*/sh_*). Mejor LGBM. 136 features.
+- 0.242  v12 (+features de ocurrencia): no mejoró (señal redundante con ncli_*).
+- 0.248  v13 (+cat4 sumada a cat3): empeoró (bloat/solapamiento, 193 features).
+- 0.269  v14 (cat4 en lugar de cat3): peor (cat3 > cat4 como contexto).
+- 0.249  AutoGluon (RMSE). 0.271-0.342 naifs. 0.302 AutoARIMA.
+- Leaderboard: top 0.217 (Victor Ruiz), 2do 0.224. Nadie bajó de 0.21.
+
+## LECCIONES CLAVE (leer antes de proponer experimentos)
+1. DIVERGENCIA LOCAL/LEADERBOARD (pasó 8+ veces): el backtest honesto
+   (train 201712->201802 o multi-corte, eval feb-2019) NO rankea igual que
+   Kaggle (feb-2020). Causa: cambio de régimen macro Argentina 2018->2019->2020.
+   El backtest sirve para DESCARTAR desastres, NO para elegir el ganador fino.
+   Optuna sobre la vara local EMPEORÓ el LB las 3 veces que se usó.
+2. BLOAT: pasado ~el set de v11, agregar features casi siempre EMPEORA aunque
+   suban el gain (gain alto != mejor score). El modelo tiene ~1050 productos
+   reales; el presupuesto de complejidad se satura rápido. Auditar redundancia.
+3. El OLS mágico NO admite enriquecimiento (v5_bis): con 182 filas, cada feature
+   extra sube varianza. Su fuerza es la simplicidad. Las features nuevas van en
+   el LGBM y se combinan con el OLS vía ENSAMBLE.
+4. ENSAMBLE: OLS + LGBM con peso ~80/20 (OLS domina). El backtest sobrevalora
+   al LGBM; en el LB conviene POCA dosis de LGBM. El 80/20 fue el ganador (0.228).
+5. Nivel cliente-producto (pares): predicción directa agregada PIERDE (0.29).
+   Como features agregadas a producto tampoco aporta (redundante con ncli_*).
+6. cat3 (99 niveles) es mejor contexto de familia que cat4 (58 grupos).
+
+## REGLAS DE TRABAJO DEL USUARIO
+- Cada experimento va en pruebas/exp_vN/ con sus .py y un summary.txt
+  (pregunta / qué se hizo / resultados / conclusiones).
+- Submits FRUGALES: máx 1-2 por experimento (candidato principal + 1 ablación).
+  Barridos de peso/params se deciden con backtest local, NO contra el LB.
+  Quedan ~49 submits hoy (límite 99/día).
+- Optuna: correrlo siempre que se pida, pero como no transfiere, reusar v11opt
+  cuando cambian pocas features (más rápido).
+- Guardar artefactos reutilizables (pickle, parquet, FI, hiperparámetros).
+
+## IDEAS NO EXPLORADAS / PENDIENTES
+- AutoGluon con validación alineada al salto dic->feb (corte en feb-2019) —
+  nunca se corrió; sería 3ra familia para el ensamble.
+- Usar cust_request_tn (demanda insatisfecha/quiebres) mejor construido.
+- Mejorar la pata LGBM del ensamble (v11 es la mejor: 0.240).
+- Submissions finales candidatas: ensamble 0.228 + OLS pura 0.231.
+
+## CÓMO CORRER EL MEJOR (ensamble 0.228)
+Ver pruebas/exp_v11/p03_ensamble.py: entrena OLS mágica + LGBM v11, mezcla
+80/20, submitea. Las predicciones base están en exp/LR01/linreg.csv (OLS) y
+exp_v11/exp_v11_fijo.csv (LGBM v11).
+================================================================================

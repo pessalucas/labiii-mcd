@@ -1,0 +1,47 @@
+EXPERIMENTO v4 — Regresiones por grupos de estacionalidad compartida
+Fecha: 2026-08-01
+
+PREGUNTA
+Si agrupamos productos que comparten la misma FORMA estacional (clusters
+k-means sobre el perfil STL normalizado, o categorías cat2) y ajustamos
+una regresión z403 por grupo, ¿mejoramos el 0.231?
+
+QUÉ SE HIZO
+- p01_regresion_por_grupos.py: perfil estacional de 12 valores por
+  producto (media mensual del componente STL, normalizada), k-means
+  k=4/6/8, y variante por cat2. Una OLS por grupo (mínimo 30 filas,
+  si no fallback al modelo mágico global). Gate de validación local en
+  el salto dic-2017->feb-2018 antes de submitear.
+
+RESULTADOS
+  backtest local:  k8 0.127 < k6 0.132 < cat2 0.140 < k4 0.144 << base 0.187
+  Kaggle público:  k4 0.278 < k8 0.291 < k6 0.293 < cat2 0.297  (base 0.231)
+  -> INVERSION TOTAL entre validación local y leaderboard.
+
+POST-MORTEM: LA VALIDACION LOCAL ESTUVO MAL DISEÑADA
+Los modelos por grupo se entrenaron en el corte 201712->201802 y se
+evaluaron EN ESE MISMO CORTE: para ellos el backtest era in-sample
+(por eso 0.127, imposible de real). El baseline mágico, entrenado solo
+con 182 productos y evaluado sobre todos, estaba mucho menos favorecido.
+Comparación viciada -> el gate dejó pasar todo. Un backtest honesto debe
+entrenar en un corte (p.ej. 201712->201802) y evaluar en OTRO año
+(201812->201902).
+
+CONCLUSIONES
+1. Agrupar por estacionalidad compartida (o por categoría) y ajustar
+   OLS por grupo NO mejora: 0.278-0.297 vs 0.231. Hipótesis rechazada.
+2. Mecanismo probable: 13 parámetros con 30-100 filas por grupo =
+   varianza alta. El orden en Kaggle (k4 mejor que k8, al revés que
+   in-sample) es la firma clásica del sobreajuste: menos grupos ->
+   más datos por modelo -> menos varianza.
+3. La lista mágica sigue invicta. Su valor no parece estar en agrupar
+   por forma estacional sino en otra cosa (posiblemente productos donde
+   la MISMA función lineal generaliza, hallada iterando contra el LB).
+4. Lección de proceso: toda validación local futura debe separar el
+   corte de entrenamiento del de evaluación (train 201712->201802,
+   eval 201812->201902). Queda como estándar para los próximos exp.
+
+SCORES ACUMULADOS DEL PROYECTO
+  0.231 regresión mágica (z403) | 0.249 AutoGluon RMSE (jul) |
+  0.260 exp_v2 AutoGluon WAPE | 0.261/0.281 exp_v3 ampliada |
+  0.278-0.297 exp_v4 grupos | 0.271-0.342 naifs/ARIMA

@@ -1,0 +1,43 @@
+EXPERIMENTO v3 — Regresión con lista mágica AMPLIADA
+Fecha: 2026-08-01
+
+PREGUNTA
+Si a los 182 productos_magicos les sumamos productos con historia larga
+(36 meses) y estacionalidad marcada (hallazgo de exp_v1/p03), ¿mejora el
+0.231 de la regresión original?
+
+QUÉ SE HIZO
+- p01_regresion_ampliada.py: réplica exacta del pipeline de z403
+  (lags [t-11..t] en 201812, clase 201902, OLS con intercepto,
+  aplicación en 201912, fallback promedio 2019, clip a >=0), cambiando
+  solo el train set. Dos variantes:
+    fs06: mágicos + (36 meses y fuerza estacional STL > 0.6) -> 336 prod.
+    fs05: mágicos + (36 meses y fuerza estacional STL > 0.5) -> 393 prod.
+
+RESULTADOS (score público Kaggle)
+  z403 original (182 mágicos)      0.231   <- sigue siendo el mejor
+  exp_v3 fs06   (336 productos)    0.261   (+154 productos: PEOR)
+  exp_v3 fs05   (393 productos)    0.281   (+211 productos: AUN PEOR)
+  R2 in-sample: 0.984 (fs06) y 0.980 (fs05) — ajusta "bien" igual,
+  el daño se ve solo fuera de muestra.
+
+CONCLUSIONES
+1. Ampliar el train set con productos estacionales y de historia larga
+   EMPEORA el modelo, con relación dosis-respuesta (más agregados ->
+   peor score). La estacionalidad + historia larga NO es el criterio
+   suficiente de la salsa mágica: es correlato, no receta.
+2. Interpretación: los coeficientes de la OLS son un compromiso entre
+   los productos del train. Los 182 mágicos parecen compartir una MISMA
+   dinámica dic->feb; al meter 150-200 productos que son estacionales
+   pero con otra dinámica, los coeficientes se corren hacia un promedio
+   que representa peor a todos (y en particular a los grandes que pagan
+   la métrica).
+3. Refuerza la hipótesis de exp_v1: la lista fue seleccionada por
+   calidad de ajuste/resultado (predictibilidad conjunta), no por
+   atributos observables. Probablemente iterada contra el leaderboard.
+
+PRÓXIMOS PASOS SUGERIDOS
+- En vez de ampliar a mano, seleccionar el train por residuo bajo en el
+  backtest dic-2017->feb-2018 (criterio objetivo de "misma dinámica").
+- Alternativa: no tocar el train; mejorar por el lado de la validación
+  alineada (AutoGluon con corte en feb-2019) o de features.

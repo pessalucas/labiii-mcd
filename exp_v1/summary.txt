@@ -1,0 +1,63 @@
+EXPERIMENTO v1 — ¿Con qué criterio se eligieron los productos_magicos de z403?
+Fecha: 2026-08-01
+
+PREGUNTA
+La regresión lineal (mejor score: 0.231) entrena solo con 182 productos
+hardcodeados ("productos_magicos"). ¿Qué los distingue del resto de los 780?
+
+QUÉ SE HIZO
+- p01_productos_magicos.py: extrae la lista del notebook y compara mágicos
+  vs resto en tamaño (tn 2019), completitud de historia, estabilidad (CV)
+  y ranking por volumen.
+- Chequeo adicional: elegibilidad para la fila de entrenamiento
+  (2018 completo + venta en 201902).
+- p02_magicos_categorias.py: % de mágicos por cat1/cat2/cat3, brand,
+  cuartil de sku_size y decil de toneladas 2019, dentro de los 562
+  elegibles (tasa global de selección: 32%).
+
+RESULTADOS
+- NO son los más grandes: 12/50 del top 50 por tn, uno rankea 761/780,
+  concentran solo 28.4% de las tn de 2019.
+- 179/182 tienen 2018 completo + venta en 201902, PERO eso lo cumplen
+  562 productos y solo se eligieron 182.
+- Dentro de los 562 elegibles, mágicos y no-mágicos son indistinguibles:
+  misma mediana de tn 2018 (~129 vs ~183), mismo CV (~0.37), misma
+  longitud de historia (36 meses en ~85% de ambos grupos).
+
+- Categorías: sin patrón. cat1 entre 27% y 34% (REF 17% pero n=6).
+  cat2/cat3/brand oscilan 10%-53% solo en grupos chicos (n<20), compatible
+  con ruido binomial y comparaciones múltiples; los grupos grandes
+  (CABELLO n=138: 36%, NIVEA n=65: 40%, MAGGI n=73: 40%) están cerca
+  del 32% global. Único caso llamativo: DOWNY 0/12.
+- Tamaño de envase (cuartiles de sku_size): plano, 30%-33%.
+- Deciles de tn 2019: sin tendencia (25%-41%, no monotónico); si algo,
+  el decil MÁS grande (D10) tiene la tasa más baja (25%).
+
+- p03_magicos_estacionalidad.py: fuerza estacional STL (Hyndman) y ACF
+  lag-12 por producto. PRIMERA SEÑAL REAL: los mágicos están sesgados
+  hacia productos estacionales. Con umbral fuerza>0.5: 76% de los
+  mágicos vs 62% de los no-mágicos (z~3.3, significativo). La tasa de
+  mágicos cae al 21-25% en los deciles menos estacionales (D1-D3) y
+  sube al 44-46% en D6/D10. No es un criterio limpio (no monotónico,
+  se iguala con umbral 0.7), pero descarta selección aleatoria: la
+  lista EVITA los productos sin patrón anual.
+
+CONCLUSIÓN
+El criterio no es una regla simple observable, pero p03 muestra que la
+selección favorece series con estacionalidad anual (las que una
+regresión de lags puede predecir bien) y evita las no estacionales.
+Consistente con una selección por calidad de ajuste del modelo.
+La selección es transversal a categorías, marcas, tamaños de envase
+y volumen. Es una
+lista curada por el profesor, probablemente por prueba y error contra
+el ajuste del modelo o el leaderboard ("la salsa mágica"). La celda
+contiene una lista vieja de 34 productos pisada por la de 182: rastro
+de esa iteración.
+
+Nota: los no-mágicos igual reciben predicción (el modelo se APLICA a los
+656 con 2019 completo; los 124 restantes van con promedio 2019). Solo no
+participan del ajuste de coeficientes.
+
+PRÓXIMO PASO SUGERIDO
+Entrenar la misma regresión con los 562 elegibles (u otros subconjuntos)
+y comparar score en Kaggle para medir si la lista mágica aporta.

@@ -1,0 +1,36 @@
+EXPERIMENTO v5_bis — OLS mágico (z403) AUMENTADO con top features v11 + categoría
+Fecha: 2026-08-02
+
+PREGUNTA
+¿Re-entrenar el OLS ganador (z403, 0.231) incorporando las top-5 features
+de v11 (s2, roll_med_3, ncli_idx, dprom_24, s3, en versión toneladas) y
+contexto de categoría, mejora el score?
+
+QUÉ SE HIZO
+- p01_ols_aumentado.py: 3 variantes incrementales sobre el OLS mágico
+  (182 productos, corte 201812->201902, fallback promedio):
+    V0 base    : réplica z403 (12 lags)
+    V1 +top v11: + ma2, ma3, med3, dprom24 (en tn) + ncli_0 (conteo)
+    V2 +categ  : V1 + venta reciente de la categoría (tn) + tendencia
+- Backtest honesto (train 201712, eval 201812->feb19) para decidir; 1 submit.
+
+RESULTADOS
+  backtest:  V0 0.2492 | V1 0.2620 | V2 0.2690  (cada feature EMPEORA)
+  Kaggle V1: 0.231  (= OLS base, no movió)
+
+CONCLUSIONES
+1. Agregar features al OLS mágico NO ayuda: en backtest empeora
+   monotónicamente, en Kaggle empata (0.231). Cada feature nueva sube
+   la varianza con solo 182 filas de entrenamiento -> mismo fenómeno
+   que la lista mágica ampliada (v3) y el bloat del LGBM (v9/v10).
+2. El OLS está en su óptimo sesgo-varianza con 13 parámetros. Su fuerza
+   ES la simplicidad; no admite enriquecimiento interno.
+3. Las features nuevas (top v11, categoría) SÍ aportan, pero en el LGBM
+   (18k+ filas que las sostienen) y se combinan con el OLS vía ENSAMBLE,
+   no metiéndolas dentro del OLS. Es exactamente lo que ya logró el
+   ensamble de v11 (0.228).
+
+IMPLICACIÓN
+Confirma la división de tareas: OLS = modelo simple robusto (pata
+estable del ensamble); LGBM = modelo rico que absorbe las features
+nuevas. El camino de mejora es el ENSAMBLE, no engordar el OLS.

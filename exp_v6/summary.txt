@@ -1,0 +1,52 @@
+EXPERIMENTO v6 — LightGBM sobre el diseño de la regresión mágica
+Fecha: 2026-08-01
+
+PREGUNTA
+¿LightGBM (objetivo L1, alineado al WAPE) puede batir el 0.231 de la
+OLS mágica, (A) replicando su diseño exacto y (B/C) con toda la
+historia como cortes deslizantes t->t+2, features derivadas y flags de
+régimen (anio_corte, mes_corte) para capturar el quiebre macro
+2018/2019 detectado en exp_v5?
+
+QUÉ SE HIZO
+- p01_lgbm.py:
+  A) LGBM, 182 mágicos, corte único 201812, 12 lags calendario.
+  B) LGBM, mágicos, 23 cortes (201712..201910), lags + idx_objetivo +
+     idx_actual + cv + anio_corte + mes_corte.
+- p02_lgbm_ratio.py:
+  C) target y lags normalizados por el promedio 12m del producto
+     (el árbol aprende forma, la escala la pone el producto).
+     C1 con sample_weight=promedio (bug), C2 sin pesos (fix).
+- Setup técnico: lightgbm requería libomp; se resolvió con symlink a la
+  copia que trae torch (sin Homebrew/CLT).
+
+RESULTADOS (backtest honesto @dic18->feb19 | Kaggle público)
+  A réplica            0.413 | 0.461   árboles + 182 filas = hambruna,
+                                        y no extrapolan escala
+  B historia+flags     0.324 | 0.272   mejora pero lejos
+  C1 ratio con pesos   263.7 | 0.760   BUG: pesos con 4 órdenes de
+                                        magnitud divergen el L1 de LGBM
+                                        (ratios predichos de miles)
+  C2 ratio fix         0.194 | 0.285   gana el backtest, pierde el LB
+  OLS mágica (ref)     0.198 | 0.231   sigue invicta
+
+CONCLUSIONES
+1. LGBM pierde en todas sus formas. La normalización a ratios es
+   imprescindible para árboles en este problema (0.461 -> 0.285) pero
+   no alcanza.
+2. C2 vs OLS expone el límite del backtest local: C2 gana el examen
+   viejo (feb-2019) y pierde el real (feb-2020). La deriva año-a-año
+   domina; el flag de régimen se usa (4ta feature en importancia) pero
+   no compensa que el régimen 2020 no está en ningún train. Solo el
+   modelo entrenado 100% en el corte más reciente queda cerca.
+3. Bug documentado: nunca pasar sample_weight con rangos extremos al
+   objective='l1' de LightGBM.
+
+SCORES ACUMULADOS
+  0.231 OLS mágica | 0.238-0.258 exp_v5 | 0.249 AG-RMSE | 0.260 exp_v2
+  | 0.261-0.281 exp_v3 | 0.272-0.760 exp_v6 | 0.278-0.297 exp_v4
+
+PRÓXIMOS PASOS SUGERIDOS
+- Información NUEVA (no reprocesar tn): cust_request_tn (demanda
+  insatisfecha/quiebres), tb_stocks, plan_precios_cuidados.
+- Ensamble OLS mágica + AutoGluon (errores decorrelacionados).

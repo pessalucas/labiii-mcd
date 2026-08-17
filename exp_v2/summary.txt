@@ -1,0 +1,47 @@
+EXPERIMENTO v2 — AutoGluon con WAPE + la receta de la regresión lineal
+Fecha: 2026-08-01
+
+PREGUNTA
+¿Una tecnología más avanzada (AutoGluon) en igualdad de condiciones con
+la regresión lineal de z403 (score 0.231) logra mejores predicciones?
+Igualdad de condiciones = misma métrica que la competencia (WAPE en vez
+del RMSE de z316) + misma receta: entrenar solo con los 182
+productos_magicos, aplicar el modelo a los 656 productos con 2019
+completo, promedio 2019 para los 124 restantes.
+
+QUÉ SE HIZO
+- p01_autogluon_wape_magicos.py: panel mensual sin huecos (meses sin
+  venta = 0), TimeSeriesPredictor(eval_metric='WAPE', prediction_length=2,
+  presets='best_quality', num_val_windows=2, time_limit=3600, semilla
+  102191), train con las 182 series mágicas, predict sobre las 656 con
+  2019 completo, fallback promedio, clip a >=0, submit automático.
+
+RESULTADOS
+- Entrenó los 10 modelos + ensamble en solo 410 s (el dataset de 182
+  series es chico; no usó la hora disponible).
+- Leaderboard interno (WAPE validación nov/dic 2019):
+  WeightedEnsemble 0.193 > DeepAR 0.219 > TFT 0.221 > Chronos2FT 0.224
+  > Chronos2 0.228 > ... > DirectTabular 0.294.
+  Pesos del ensamble: TFT 0.36, SeasonalNaive 0.27, AutoETS 0.25, DeepAR 0.11.
+- SCORE KAGGLE PÚBLICO: 0.260
+  (vs regresión lineal 0.231, AutoGluon-RMSE original de julio 0.249)
+
+CONCLUSIONES
+1. La tecnología avanzada NO superó a la regresión en igualdad de
+   condiciones: 0.260 vs 0.231.
+2. Brecha enorme validación->leaderboard (0.193 -> 0.260): el modelo que
+   mejor predice nov/dic 2019 no es el que mejor predice feb 2020. La
+   validación por backtest de últimos meses no transfiere al salto
+   dic->feb. La ventaja de la regresión NO era el algoritmo: es que su
+   diseño entrena EXACTAMENTE el problema del examen (corte 201812 ->
+   objetivo 201902).
+3. Cambiar RMSE->WAPE + receta mágica no mejoró al AutoGluon original
+   (0.260 vs 0.249): con solo 182 series los modelos profundos tienen
+   poco para aprender, y quizá el train completo (780 series) le aporta
+   más a un modelo global que la curación de la lista.
+
+PRÓXIMOS PASOS SUGERIDOS
+- exp con AutoGluon WAPE entrenando con TODAS las series (aislar el
+  efecto de la lista mágica del de la métrica).
+- Diseñar la validación alineada al problema: evaluar candidatos por su
+  error en el salto dic-2018 -> feb-2019, no en nov/dic 2019.
